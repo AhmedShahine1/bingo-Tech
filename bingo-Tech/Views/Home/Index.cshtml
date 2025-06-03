@@ -513,18 +513,39 @@
 
         // Leave room
         async function leaveRoom() {
-            if (currentCallId) {
-                await endCall();
+            try {
+                // End any active call first
+                if (currentCallId) {
+                    await endCall();
+                }
+
+                // Call server-side LeaveRoom method
+                if (connection && connection.state === signalR.HubConnectionState.Connected) {
+                    await connection.invoke("LeaveRoom");
+                }
+
+                // Reset UI state
+                loginSection.classList.remove('hidden');
+                chatSection.classList.add('hidden');
+
+                // Clear form values
+                usernameInput.value = '';
+                usersList.innerHTML = '';
+                updateCallStatus('Disconnected', 'disconnected');
+
+                // Reset variables
+                currentUsername = null;
+                currentRoom = null;
+
+            } catch (error) {
+                console.error('Error leaving room:', error);
+                // Force UI reset even if server call fails
+                loginSection.classList.remove('hidden');
+                chatSection.classList.add('hidden');
+                usernameInput.value = '';
+                usersList.innerHTML = '';
+                updateCallStatus('Disconnected', 'disconnected');
             }
-
-            await connection.stop();
-
-            loginSection.classList.remove('hidden');
-            chatSection.classList.add('hidden');
-
-            usernameInput.value = '';
-            usersList.innerHTML = '';
-            updateCallStatus('Disconnected', 'disconnected');
         }
 
         // Event listeners

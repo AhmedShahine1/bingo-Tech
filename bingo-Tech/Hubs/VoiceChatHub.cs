@@ -102,7 +102,36 @@ namespace bingo_Tech.Hubs
 
             await Clients.Client(otherUserId).SendAsync("CallEnded", Context.ConnectionId);
         }
+        public async Task LeaveRoom()
+        {
+            var userId = Context.ConnectionId;
 
+            try
+            {
+                // End any active calls
+                if (ActiveCalls.TryRemove(userId, out var callId))
+                {
+                    await _callLogService.EndCallAsync(callId);
+                }
+
+                // Remove from room and notify others
+                if (ConnectedUsers.TryGetValue(userId, out var userInfo) &&
+                    UserRooms.TryGetValue(userId, out var room))
+                {
+                    await Groups.RemoveFromGroupAsync(userId, room);
+                    await Clients.Group(room).SendAsync("UserLeft", userInfo.Username, userId);
+                }
+
+                // Clean up user data but keep connection alive
+                ConnectedUsers.TryRemove(userId, out _);
+                UserRooms.TryRemove(userId, out _);
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"Error leaving room: {ex.Message}");
+                throw;
+            }
+        }
         public override async Task OnDisconnectedAsync(Exception? exception)
         {
             var userId = Context.ConnectionId;
