@@ -1,16 +1,15 @@
-using System.Diagnostics;
-using bingo_Tech.Models;
+using bingo_Tech.IServices;
 using Microsoft.AspNetCore.Mvc;
 
 namespace bingo_Tech.Controllers
 {
     public class HomeController : Controller
     {
-        private readonly ILogger<HomeController> _logger;
+        private readonly ICallLogService _callLogService;
 
-        public HomeController(ILogger<HomeController> logger)
+        public HomeController(ICallLogService callLogService)
         {
-            _logger = logger;
+            _callLogService = callLogService;
         }
 
         public IActionResult Index()
@@ -18,15 +17,10 @@ namespace bingo_Tech.Controllers
             return View();
         }
 
-        public IActionResult Privacy()
+        public async Task<IActionResult> CallHistory()
         {
-            return View();
-        }
-
-        [ResponseCache(Duration = 0, Location = ResponseCacheLocation.None, NoStore = true)]
-        public IActionResult Error()
-        {
-            return View(new ErrorViewModel { RequestId = Activity.Current?.Id ?? HttpContext.TraceIdentifier });
+            var history = await _callLogService.GetCallHistoryAsync();
+            return View(history);
         }
     }
 }

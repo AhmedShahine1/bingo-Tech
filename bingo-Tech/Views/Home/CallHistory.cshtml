@@ -1,0 +1,141 @@
+﻿@model List<CallLog>
+@{
+    ViewData["Title"] = "Call History";
+}
+
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Call History</title>
+    <style>
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 20px;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+        }
+
+        .container {
+            background: white;
+            border-radius: 15px;
+            padding: 30px;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.2);
+        }
+
+        h1 {
+            color: #333;
+            text-align: center;
+            margin-bottom: 30px;
+        }
+
+        .back-link {
+            display: inline-block;
+            margin-bottom: 20px;
+            color: #667eea;
+            text-decoration: none;
+            font-weight: bold;
+        }
+
+            .back-link:hover {
+                text-decoration: underline;
+            }
+
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-top: 20px;
+        }
+
+        th, td {
+            padding: 12px;
+            text-align: left;
+            border-bottom: 1px solid #ddd;
+        }
+
+        th {
+            background: linear-gradient(45deg, #667eea, #764ba2);
+            color: white;
+            font-weight: bold;
+        }
+
+        tr:nth-child(even) {
+            background-color: #f8f9fa;
+        }
+
+        tr:hover {
+            background-color: #e9ecef;
+        }
+
+        .duration {
+            font-weight: bold;
+            color: #28a745;
+        }
+
+        .no-calls {
+            text-align: center;
+            color: #6c757d;
+            font-style: italic;
+            padding: 40px;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <a href="/" class="back-link">← Back to Voice Chat</a>
+        <h1>📞 Call History</h1>
+
+        @if (Model.Any())
+        {
+            <table>
+                <thead>
+                    <tr>
+                        <th>Caller</th>
+                        <th>Receiver</th>
+                        <th>Start Time</th>
+                        <th>End Time</th>
+                        <th>Duration</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    @foreach (var call in Model)
+                    {
+                        <tr>
+                            <td>👤 @call.CallerName</td>
+                            <td>👤 @call.ReceiverName</td>
+                            <td>@call.StartTime.ToString("MMM dd, yyyy HH:mm:ss")</td>
+                            <td>
+                                @if (call.EndTime.HasValue)
+                                {
+                                    @call.EndTime.Value.ToString("MMM dd, yyyy HH:mm:ss")
+                                }
+                                else
+                                {
+                                    <span style="color: #dc3545;">Call in progress</span>
+                                }
+                            </td>
+                            <td class="duration">
+                                @if (call.Duration > 0)
+                                {
+                                    @TimeSpan.FromSeconds(call.Duration).ToString(@"mm\:ss")
+                                }
+                                else
+                                {
+                                    <span style="color: #6c757d;">-</span>
+                                }
+                            </td>
+                        </tr>
+                    }
+                </tbody>
+            </table>
+        }
+        else
+        {
+            <div class="no-calls">
+                No call history available yet. Start making some calls! 📞
+            </div>
+        }
+    </div>
+</body>
+</html>

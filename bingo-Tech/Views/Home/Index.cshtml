@@ -1,8 +1,552 @@
 ﻿@{
-    ViewData["Title"] = "Home Page";
+    ViewData["Title"] = "Voice Chat Application";
 }
 
-<div class="text-center">
-    <h1 class="display-4">Welcome</h1>
-    <p>Learn about <a href="https://learn.microsoft.com/aspnet/core">building Web apps with ASP.NET Core</a>.</p>
-</div>
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Voice Chat App</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/microsoft-signalr/8.0.0/signalr.min.js"></script>
+    <style>
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 20px;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+        }
+
+        .container {
+            background: white;
+            border-radius: 15px;
+            padding: 30px;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.2);
+        }
+
+        .login-section, .chat-section {
+            text-align: center;
+        }
+
+        .login-section {
+            max-width: 400px;
+            margin: 0 auto;
+        }
+
+        .form-group {
+            margin-bottom: 20px;
+        }
+
+        input, select, button {
+            padding: 12px;
+            border-radius: 8px;
+            border: 2px solid #ddd;
+            font-size: 16px;
+            width: 100%;
+            box-sizing: border-box;
+        }
+
+        button {
+            background: linear-gradient(45deg, #667eea, #764ba2);
+            color: white;
+            border: none;
+            cursor: pointer;
+            transition: transform 0.2s;
+        }
+
+            button:hover {
+                transform: translateY(-2px);
+            }
+
+            button:disabled {
+                background: #ccc;
+                cursor: not-allowed;
+                transform: none;
+            }
+
+        .users-section {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 30px;
+            margin-top: 30px;
+        }
+
+        .users-list {
+            background: #f8f9fa;
+            border-radius: 10px;
+            padding: 20px;
+        }
+
+        .user-item {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 15px;
+            background: white;
+            margin: 10px 0;
+            border-radius: 8px;
+            box-shadow: 0 2px 5px rgba(0,0,0,0.1);
+        }
+
+        .call-controls {
+            background: #f8f9fa;
+            border-radius: 10px;
+            padding: 20px;
+        }
+
+        .status {
+            padding: 10px;
+            border-radius: 8px;
+            margin: 10px 0;
+            font-weight: bold;
+        }
+
+            .status.connected {
+                background: #d4edda;
+                color: #155724;
+            }
+
+            .status.connecting {
+                background: #fff3cd;
+                color: #856404;
+            }
+
+            .status.disconnected {
+                background: #f8d7da;
+                color: #721c24;
+            }
+
+        .hidden {
+            display: none;
+        }
+
+        h1, h2, h3 {
+            color: #333;
+            margin-bottom: 20px;
+        }
+
+        .call-button {
+            background: #28a745;
+            padding: 8px 16px;
+            font-size: 14px;
+            width: auto;
+        }
+
+        .end-call-button {
+            background: #dc3545;
+            width: 100%;
+            margin-top: 10px;
+        }
+
+        .history-link {
+            display: inline-block;
+            margin-top: 20px;
+            color: #667eea;
+            text-decoration: none;
+            font-weight: bold;
+        }
+
+            .history-link:hover {
+                text-decoration: underline;
+            }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>🎙️ Voice Chat Application</h1>
+
+        <!-- Login Section -->
+        <div id="loginSection" class="login-section">
+            <h2>Join the Voice Chat</h2>
+            <div class="form-group">
+                <input type="text" id="usernameInput" placeholder="Enter your username" maxlength="50" />
+            </div>
+            <div class="form-group">
+                <select id="roomSelect">
+                    <option value="General">General Room</option>
+                    <option value="Gaming">Gaming Room</option>
+                    <option value="Music">Music Room</option>
+                    <option value="Study">Study Room</option>
+                </select>
+            </div>
+            <button id="joinButton">Join Chat Room</button>
+            <a href="/Home/CallHistory" class="history-link">📞 View Call History</a>
+        </div>
+
+        <!-- Chat Section -->
+        <div id="chatSection" class="chat-section hidden">
+            <h2>Welcome, <span id="currentUsername"></span>!</h2>
+            <p>Room: <strong><span id="currentRoom"></span></strong></p>
+
+            <div class="users-section">
+                <!-- Online Users -->
+                <div class="users-list">
+                    <h3>👥 Online Users</h3>
+                    <div id="usersList"></div>
+                </div>
+
+                <!-- Call Controls -->
+                <div class="call-controls">
+                    <h3>📞 Call Controls</h3>
+                    <div id="callStatus" class="status disconnected">Ready to make calls</div>
+                    <div id="callControls">
+                        <button id="endCallButton" class="end-call-button hidden">End Call</button>
+                    </div>
+                </div>
+            </div>
+
+            <button id="leaveRoomButton" style="margin-top: 20px; background: #6c757d;">Leave Room</button>
+        </div>
+    </div>
+
+    <script>
+        // Global variables
+        let connection;
+        let localStream;
+        let peerConnection;
+        let currentCallId;
+        let isInCall = false;
+        let currentUsername;
+        let currentRoom;
+
+        // WebRTC configuration
+        const rtcConfig = {
+            iceServers: [
+                { urls: 'stun:stun.l.google.com:19302' },
+                { urls: 'stun:stun1.l.google.com:19302' }
+            ]
+        };
+
+        // DOM elements
+        const loginSection = document.getElementById('loginSection');
+        const chatSection = document.getElementById('chatSection');
+        const usernameInput = document.getElementById('usernameInput');
+        const roomSelect = document.getElementById('roomSelect');
+        const joinButton = document.getElementById('joinButton');
+        const leaveRoomButton = document.getElementById('leaveRoomButton');
+        const usersList = document.getElementById('usersList');
+        const callStatus = document.getElementById('callStatus');
+        const endCallButton = document.getElementById('endCallButton');
+
+        // Initialize SignalR connection
+        async function initializeSignalR() {
+            connection = new signalR.HubConnectionBuilder()
+                .withUrl("/voicechatHub")
+                .build();
+
+            // Event handlers
+            connection.on("UserJoined", (username, connectionId) => {
+                if (username !== currentUsername) {
+                    addUserToList(username, connectionId);
+                    updateCallStatus(`${username} joined the room`, 'connected');
+                }
+            });
+
+            connection.on("UserLeft", (username, connectionId) => {
+                removeUserFromList(connectionId);
+                updateCallStatus(`${username} left the room`, 'disconnected');
+            });
+
+            connection.on("UpdateUsersList", (users) => {
+                updateUsersList(users);
+                console.log(users);
+            });
+
+            connection.on("IncomingCall", (callerId, callerName) => {
+                handleIncomingCall(callerId, callerName);
+            });
+
+            connection.on("CallAccepted", (receiverId, receiverName) => {
+                handleCallAccepted(receiverId, receiverName);
+            });
+
+            connection.on("CallRejected", (receiverId) => {
+                handleCallRejected();
+            });
+
+            connection.on("CallEnded", (otherUserId) => {
+                handleCallEnded();
+            });
+
+            connection.on("ReceiveSignalingMessage", (senderId, senderName, type, data) => {
+                handleSignalingMessage(senderId, type, data);
+            });
+
+            await connection.start();
+        }
+
+        // Join room
+        async function joinRoom() {
+            const username = usernameInput.value.trim();
+            const room = roomSelect.value;
+
+            if (!username) {
+                alert('Please enter a username');
+                return;
+            }
+
+            currentUsername = username;
+            currentRoom = room;
+
+            try {
+                await connection.invoke("JoinRoom", username, room);
+
+                document.getElementById('currentUsername').textContent = username;
+                document.getElementById('currentRoom').textContent = room;
+
+                loginSection.classList.add('hidden');
+                chatSection.classList.remove('hidden');
+
+                updateCallStatus('Connected to room', 'connected');
+            } catch (error) {
+                console.error('Error joining room:', error);
+                alert('Failed to join room. Please try again.');
+            }
+        }
+
+        // Update users list
+        function updateUsersList(users) {
+            usersList.innerHTML = '';
+            users.forEach(user => {
+                addUserToList(user.username, user.connectionId);
+            });
+        }
+
+        // Add user to list
+        function addUserToList(username, connectionId) {
+            const userDiv = document.createElement('div');
+            userDiv.className = 'user-item';
+            userDiv.id = `user-${connectionId}`;
+            userDiv.innerHTML = `
+                <span>👤 ${username}</span>
+                <button class="call-button" onclick="startCall('${connectionId}', '${username}')">Call</button>
+            `;
+            usersList.appendChild(userDiv);
+        }
+
+        // Remove user from list
+        function removeUserFromList(connectionId) {
+            const userElement = document.getElementById(`user-${connectionId}`);
+            if (userElement) {
+                userElement.remove();
+            }
+        }
+
+        // Start a call
+        async function startCall(targetUserId, targetUsername) {
+            if (isInCall) {
+                alert('You are already in a call');
+                return;
+            }
+
+            try {
+                updateCallStatus(`Calling ${targetUsername}...`, 'connecting');
+                currentCallId = targetUserId;
+
+                // Get user media
+                localStream = await navigator.mediaDevices.getUserMedia({ audio: true });
+
+                // Create peer connection
+                await createPeerConnection();
+
+                // Add local stream
+                localStream.getTracks().forEach(track => {
+                    peerConnection.addTrack(track, localStream);
+                });
+
+                // Send call invitation
+                await connection.invoke("StartCall", targetUserId);
+
+            } catch (error) {
+                console.error('Error starting call:', error);
+                updateCallStatus('Failed to start call', 'disconnected');
+                alert('Failed to access microphone or start call');
+            }
+        }
+
+        // Handle incoming call
+        async function handleIncomingCall(callerId, callerName) {
+            if (isInCall) {
+                await connection.invoke("RejectCall", callerId);
+                return;
+            }
+
+            const accept = confirm(`Incoming call from ${callerName}. Accept?`);
+
+            if (accept) {
+                try {
+                    currentCallId = callerId;
+                    updateCallStatus(`Accepting call from ${callerName}...`, 'connecting');
+
+                    // Get user media
+                    localStream = await navigator.mediaDevices.getUserMedia({ audio: true });
+
+                    // Create peer connection
+                    await createPeerConnection();
+
+                    // Add local stream
+                    localStream.getTracks().forEach(track => {
+                        peerConnection.addTrack(track, localStream);
+                    });
+
+                    await connection.invoke("AcceptCall", callerId);
+                } catch (error) {
+                    console.error('Error accepting call:', error);
+                    await connection.invoke("RejectCall", callerId);
+                    updateCallStatus('Failed to accept call', 'disconnected');
+                }
+            } else {
+                await connection.invoke("RejectCall", callerId);
+            }
+        }
+
+        // Handle call accepted
+        async function handleCallAccepted(receiverId, receiverName) {
+            updateCallStatus(`Call accepted by ${receiverName}. Connecting...`, 'connecting');
+
+            // Create and send offer
+            const offer = await peerConnection.createOffer();
+            await peerConnection.setLocalDescription(offer);
+
+            await connection.invoke("SendSignalingMessage", receiverId, "offer", offer);
+        }
+
+        // Handle call rejected
+        function handleCallRejected() {
+            updateCallStatus('Call was rejected', 'disconnected');
+            cleanup();
+        }
+
+        // Handle call ended
+        function handleCallEnded() {
+            updateCallStatus('Call ended', 'disconnected');
+            cleanup();
+        }
+
+        // Handle signaling messages
+        async function handleSignalingMessage(senderId, type, data) {
+            try {
+                switch (type) {
+                    case 'offer':
+                        await peerConnection.setRemoteDescription(new RTCSessionDescription(data));
+                        const answer = await peerConnection.createAnswer();
+                        await peerConnection.setLocalDescription(answer);
+                        await connection.invoke("SendSignalingMessage", senderId, "answer", answer);
+                        break;
+
+                    case 'answer':
+                        await peerConnection.setRemoteDescription(new RTCSessionDescription(data));
+                        break;
+
+                    case 'ice-candidate':
+                        await peerConnection.addIceCandidate(new RTCIceCandidate(data));
+                        break;
+                }
+            } catch (error) {
+                console.error('Error handling signaling message:', error);
+            }
+        }
+
+        // Create peer connection
+        async function createPeerConnection() {
+            peerConnection = new RTCPeerConnection(rtcConfig);
+
+            // Handle ICE candidates
+            peerConnection.onicecandidate = async (event) => {
+                if (event.candidate && currentCallId) {
+                    await connection.invoke("SendSignalingMessage", currentCallId, "ice-candidate", event.candidate);
+                }
+            };
+
+            // Handle remote stream
+            peerConnection.ontrack = (event) => {
+                const remoteAudio = new Audio();
+                remoteAudio.srcObject = event.streams[0];
+                remoteAudio.play();
+
+                updateCallStatus('Call connected', 'connected');
+                isInCall = true;
+                endCallButton.classList.remove('hidden');
+            };
+
+            // Handle connection state changes
+            peerConnection.onconnectionstatechange = () => {
+                console.log('Connection state:', peerConnection.connectionState);
+                if (peerConnection.connectionState === 'failed') {
+                    updateCallStatus('Connection failed', 'disconnected');
+                    cleanup();
+                }
+            };
+        }
+
+        // End call
+        async function endCall() {
+            if (currentCallId) {
+                await connection.invoke("EndCall", currentCallId);
+            }
+            cleanup();
+            updateCallStatus('Call ended', 'disconnected');
+        }
+
+        // Cleanup call resources
+        function cleanup() {
+            if (localStream) {
+                localStream.getTracks().forEach(track => track.stop());
+                localStream = null;
+            }
+
+            if (peerConnection) {
+                peerConnection.close();
+                peerConnection = null;
+            }
+
+            currentCallId = null;
+            isInCall = false;
+            endCallButton.classList.add('hidden');
+        }
+
+        // Update call status
+        function updateCallStatus(message, status) {
+            callStatus.textContent = message;
+            callStatus.className = `status ${status}`;
+        }
+
+        // Leave room
+        async function leaveRoom() {
+            if (currentCallId) {
+                await endCall();
+            }
+
+            await connection.stop();
+
+            loginSection.classList.remove('hidden');
+            chatSection.classList.add('hidden');
+
+            usernameInput.value = '';
+            usersList.innerHTML = '';
+            updateCallStatus('Disconnected', 'disconnected');
+        }
+
+        // Event listeners
+        joinButton.addEventListener('click', joinRoom);
+        leaveRoomButton.addEventListener('click', leaveRoom);
+        endCallButton.addEventListener('click', endCall);
+
+        usernameInput.addEventListener('keypress', (e) => {
+            if (e.key === 'Enter') {
+                joinRoom();
+            }
+        });
+
+        // Initialize app
+        window.addEventListener('load', async () => {
+            await initializeSignalR();
+        });
+
+        // Cleanup on page unload
+        window.addEventListener('beforeunload', () => {
+            cleanup();
+        });
+    </script>
+</body>
+</html>
